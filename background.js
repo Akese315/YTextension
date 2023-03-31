@@ -1,24 +1,20 @@
 
-
-
 var number = 0;
 var downloadBool = false;
 var currentTab;
 var musique_url ="";
 var video_url ="";
-var previousURLMUSIC ="";
-var previousURLVIDEO ="";
 var mainPort;
 
-function updateMessaging()
+function   updateMessaging()
 {    
     mainPort.onMessage.addListener(function(request) {
         if(request.message === "connected")
         {
+            console.log("sent :" + video_url);
+            console.log("sent :" + musique_url);
             mainPort.postMessage({message:"urlMusic", url: musique_url});
             mainPort.postMessage({message: "urlVideo",url: video_url});
-            previousURLVIDEO = "";
-            previousURLMUSIC = "";
         }
     });
 }
@@ -38,32 +34,46 @@ function select(url)
     var newurl = url.substring(0,index);
     if(url.match(new RegExp("audio")))
     {
-       
-        musique_url = newurl;
-        if(mainPort !== undefined && previousURLMUSIC !== musique_url)
+        console.log("audio");
+        if(newurl !== musique_url)
         {
-            previousURLMUSIC = musique_url;
+            musique_url = newurl;
+            console.log(musique_url);
+        }
+        else
+        {
+            return;
+        }
+        if(mainPort !== undefined)
+        {
             mainPort.postMessage({message : "urlMusic", url: musique_url });
         }        
         return;
     }
     if(url.match(new RegExp("video")))
     {
-        video_url = newurl;
-        if(mainPort !== undefined && previousURLVIDEO !== video_url)
+        console.log("video");
+        if( newurl !== video_url)
         {
-            previousURLVIDEO = video_url;
+            video_url = newurl;
+            console.log(video_url);
+        }else
+        {
+            return;
+        }
+        if(mainPort !== undefined)
+        {
             mainPort.postMessage({message : "urlVideo", url: video_url });
         }
         return;
     }
+    console.log("matched nothing")
    
 }
 
 function launchListener()
 {
     chrome.webRequest.onHeadersReceived.addListener(function(details){
-    
         select(details.url);        
         number++;
     },
@@ -97,9 +107,8 @@ function launchListener()
 
 function main()
 {
+    console.log("started")
     launchListener();
-  
-
 }
 
 main();
