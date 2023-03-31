@@ -12,8 +12,9 @@ var btndown;
 var bytes;
 var MusicUrl = "";
 var VideoUrl = "";
-var pourcent = "";
 let bytesDownloaded = 0;
+let AudioFileLength = 0;
+let VideoFileLength = 0;
 
 function loading()
 {  
@@ -89,7 +90,7 @@ $( document ).ready(async function()
      
 });
 
-function downloadVideo(name)
+async function downloadVideo(name)
 {
   loading();
   var musicData;
@@ -113,11 +114,22 @@ function downloadVideo(name)
           }
       });  
       
-  
-    
+  const audioFile = await fetch(MusicRequest).then(response => download(response));
+  const videoFile = await fetch(VideoRequest).then(response =>download(response));
+
+  await ffmpeg.run("-i", videoFile, "-i", audioFile, "-c:v", "copy", "-c:a", "aac", "-shortest", outputFilename);
+  const outputData = await ffmpeg.read(outputFilename);
+  getFile(outputData);
 }
 
-function downloadMusic(name)
+function addPercent(percent)
+{
+  var fullLength = AudioFileLength + VideoFileLength;
+  bytesDownloaded += percent;
+  pourcent.textContent = (Math.round(bytesDownloaded*100/VideoFileLength)) + "%";
+}
+
+async function downloadMusic(name)
 {
   loading();
   if(MusicUrl.length == 0)
@@ -131,7 +143,8 @@ function downloadMusic(name)
               'content-Type' : 'blob'
           }
       });
-  fetch(MusicRequest).then(response => download(response)).then(file => getFile(file,name));
+  const audioFile = fetch(MusicRequest).then(response => download(response));
+  getFile(audioFile);
 }
 
 async function download(response)
@@ -148,8 +161,7 @@ async function download(response)
     if(done){
       break;
     }
-    currentLength += value.length;
-    pourcent.textContent = (Math.round(currentLength*100/fileLength)) + "%";
+    addPercent(value.length);
     chunks.push(value);
   }
   return new Blob(chunks,{type :"audio/mp3"});
