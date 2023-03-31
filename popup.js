@@ -1,3 +1,9 @@
+const { createFFmpeg, fetchFile } = FFmpeg;
+const ffmpeg = createFFmpeg({
+  log: true,
+  corePath: chrome.runtime.getURL('vendor/ffmpeg-core.js'),
+});
+
 var radio_Music;
 var port;
 var alreadyLoaded = false;
@@ -6,6 +12,8 @@ var btndown;
 var bytes;
 var MusicUrl = "";
 var VideoUrl = "";
+var pourcent = "";
+let bytesDownloaded = 0;
 
 function loading()
 {  
@@ -36,15 +44,16 @@ function sleep()
     },1000);
 }
 
-$( document ).ready(function()
-{    
+$( document ).ready(async function()
+{   
+    await ffmpeg.load();
     radio_Music = document.getElementById("Music_radio");
     loader = document.getElementById("loader");
     FileName_field = document.getElementById("file_name");
     btndown = document.getElementById("download");
+    pourcent = document.getElementById("pourcent");
     port = chrome.runtime.connect({name : "loading stage"});    
-    port.postMessage({"message": "connected"});
-    
+    console.log("connected")
     btndown.addEventListener('click',function()
     {
       Music_radio = radio_Music.checked;
@@ -64,15 +73,19 @@ $( document ).ready(function()
     });    
     
     port.onMessage.addListener(function(request) {
+      console.log(request);
       if (request.message === "urlMusic")
         {             
           MusicUrl = request.url;
         }   
       if(request.message === "urlVideo")   
         {
+         
           VideoUrl = request.url;
         }                
       });
+
+      port.postMessage({"message": "connected"});
      
 });
 
@@ -100,24 +113,7 @@ function downloadVideo(name)
           }
       });  
       
-      fetch(MusicRequest)
-          .then(response => response.blob())
-          .then(data=> {
-            musicData = data;          
-          })
-          .then(function()
-            {
-              fetch(VideoRequest)
-              .then(response=> response.blob())
-              .then(data=> {
-                videoData = data;                  
-                })
-              .then(function()
-              {
-                var globalData = new Blob([videoData,musicData],{type :"video/mp4"});
-                getFile(globalData, name);
-              })      
-            });
+  
     
 }
 
@@ -135,12 +131,28 @@ function downloadMusic(name)
               'content-Type' : 'blob'
           }
       });
-      fetch(MusicRequest)
-          .then(response => response.blob())
-          .then(data=> {   
-            var globalData = new Blob([data],{type : "audio/mp3"});      
-            getFile(globalData, name);
-          });
+  fetch(MusicRequest).then(response => download(response)).then(file => getFile(file,name));
+}
+
+async function download(response)
+{
+  console.log("start downloading...")
+  var chunks = [];
+  console.log(response.headers);
+  var fileLength = response.headers.get('content-length');
+  console.log(fileLength);
+  var currentLength = 0;
+  const reader = response.body.getReader()
+  while(true){
+    const { done, value } = await reader.read();
+    if(done){
+      break;
+    }
+    currentLength += value.length;
+    pourcent.textContent = (Math.round(currentLength*100/fileLength)) + "%";
+    chunks.push(value);
+  }
+  return new Blob(chunks,{type :"audio/mp3"});
 }
 
 function getFile(file, name)
