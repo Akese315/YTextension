@@ -1,4 +1,8 @@
-import ffmpeg from ''
+const { createFFmpeg, fetchFile } = FFmpeg;
+const ffmpeg = createFFmpeg({
+  log: true,
+  corePath: chrome.runtime.getURL('vendor/ffmpeg-core.js'),
+});
 
 var radio_Music;
 var port;
@@ -40,9 +44,9 @@ function sleep()
     },1000);
 }
 
-$( document ).ready(function()
-{    
-    ffmepg.load();
+$( document ).ready(async function()
+{   
+    await ffmpeg.load();
     radio_Music = document.getElementById("Music_radio");
     loader = document.getElementById("loader");
     FileName_field = document.getElementById("file_name");
