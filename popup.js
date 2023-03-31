@@ -93,12 +93,15 @@ $( document ).ready(async function()
 async function downloadVideo(name)
 {
   loading();
-  var musicData;
-  var videoData; 
   if(MusicUrl.length == 0 ||VideoUrl.length == 0)
   {
     return;
   }
+
+  AudioFileLength = getContentLength(MusicUrl);
+  VideoFileLength = getContentLength(VideoUrl);
+
+
   var MusicRequest = new Request(MusicUrl,
       {
           method: 'POST',
@@ -117,8 +120,19 @@ async function downloadVideo(name)
   const audioFile = await fetch(MusicRequest).then(response => download(response));
   const videoFile = await fetch(VideoRequest).then(response =>download(response));
 
-  await ffmpeg.run("-i", videoFile, "-i", audioFile, "-c:v", "copy", "-c:a", "aac", "-shortest", outputFilename);
-  const outputData = await ffmpeg.read(outputFilename);
+  AudioFileLength = 0;
+  VideoFileLength = 0;
+
+  const ffmpegCommand = [
+    "-i", videoFile,
+    "-i", audioFile,
+    "-c:v", "copy",
+    "-c:a", "aac",
+    "-strict", "experimental",
+    "video.mp4",
+  ];
+
+  //const outputData = await ffmpeg.runWithOutputAsBlob(ffmpegCommand);
   getFile(outputData);
 }
 
@@ -126,7 +140,15 @@ function addPercent(percent)
 {
   var fullLength = AudioFileLength + VideoFileLength;
   bytesDownloaded += percent;
-  pourcent.textContent = (Math.round(bytesDownloaded*100/VideoFileLength)) + "%";
+  pourcent.textContent = (Math.round(bytesDownloaded*100/fullLength)) + "%";
+}
+
+async function getContentLength(url)
+{
+    const response = await fetch(url, { method: "HEAD" });
+    const contentLength = response.headers.get("content-length");
+    console.log(`La taille du fichier est de ${contentLength} octets.`);
+    return contentLength;
 }
 
 async function downloadMusic(name)
@@ -143,7 +165,7 @@ async function downloadMusic(name)
               'content-Type' : 'blob'
           }
       });
-  const audioFile = fetch(MusicRequest).then(response => download(response));
+  const audioFile = await fetch(MusicRequest).then(response => download(response));
   getFile(audioFile);
 }
 

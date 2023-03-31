@@ -2,7 +2,7 @@
     
         
     "name": "ytDownloader",
-    "version": "1.0",
+    "version": "1.1",
     "description": "This chrome extension allows you to download video or music",
     
     "icons":{
@@ -20,13 +20,11 @@
         "default_popup" :"popup.html"
       },
 
-      "host_permissions": [
-        "http://*/*",
-        "https://*/*",
-        "*://*.google.com/"
-      ],
-
-    
+    "host_permissions": [
+      "http://*/*",
+      "https://*/*",
+      "*://*.google.com/"
+    ],
     "background":{
         "service_worker":"background.js"
     },
