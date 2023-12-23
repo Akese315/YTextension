@@ -1,27 +1,23 @@
-var radio_Music;
-var port;
-var alreadyLoaded = false;
+var lastTimeUpdated = 0;
+var bytesDownloaded = 0;
+var audioURL = "";
+var videoURL = "";
+const DEFAULT_RANGE = 500000;
+const TIME_BTWEEN_REQ = 200;
+var startedAt = 0;
 var clickBool = false;
-var btndown;
-var bytes;
-var MusicUrl = "";
-var VideoUrl = "";
-let bytesDownloaded = 0;
-let AudioFileLength = 0;
-let VideoFileLength = 0;
 
 function loading()
 {  
-  if(!alreadyLoaded)
+  if(!clickBool)
     {
       btndown.className= "load";
-      setTimeout(function()
+      setTimeout(()=>
         {
           btndown.style.display = "none";
           loader.style.display ="block";
           loader.className = "sleep";                
         },1000);  
-      alreadyLoaded = true;
       clickBool = true;               
     }     
 }
@@ -29,13 +25,12 @@ function loading()
 function sleep()
 {
   loader.className = "load";
-  setTimeout(function()
+  setTimeout(()=>
     {
       loader.style.display ="none";
       btndown.style.display ="block";
       btndown.className= "sleep";
       clickBool = false;
-      alreadyLoaded = false;
     },1000);
 }
 
@@ -64,20 +59,20 @@ $( document ).ready(async function()
               
             downloadVideo(FileName_field.value);
           }        
-           
+          
         }        
     });    
     
     port.onMessage.addListener(function(request) {
-      console.log(request);
+      //console.log(request);
       if (request.message === "urlMusic")
         {             
-          MusicUrl = request.url;
+          audioURL = request.url;
         }   
       if(request.message === "urlVideo")   
         {
          
-          VideoUrl = request.url;
+          videoURL = request.url;
         }                
       });
 
@@ -85,119 +80,205 @@ $( document ).ready(async function()
      
 });
 
-async function downloadVideo(name)
-{
-  loading();
-  if(MusicUrl.length == 0 ||VideoUrl.length == 0)
-  {
-    return;
-  }
-
-  AudioFileLength = getContentLength(MusicUrl);
-  VideoFileLength = getContentLength(VideoUrl);
-
-
-  var MusicRequest = new Request(MusicUrl,
-      {
-          method: 'POST',
-          headers: {
-              'content-Type' : 'blob'
-          }
-      });
-  var VideoRequest = new Request(VideoUrl,
-      {
-          method: 'POST',
-          headers: {
-              'content-Type' : 'blob'
-          }
-      });  
-      
-  const audioFile = await fetch(MusicRequest).then(response => download(response));
-  const videoFile = await fetch(VideoRequest).then(response =>download(response));
-
-  getFile(outputData);
-}
-
-function addPercent(bytes,ETA)
-{
-  var fullLength = AudioFileLength + VideoFileLength;
-  bytesDownloaded += bytes;
-  pourcent.textContent = Math.floor(bytesDownloaded/fullLength*100)  + "% ETA : "+Math.floor(ETA)+"s";
-}
-
 async function getContentLength(url)
 {
     const response = await fetch(url, { method: "HEAD" });
     const contentLength = response.headers.get("content-length");
     console.log(`La taille du fichier est de ${contentLength} octets.`);
-    console.log(typeof (contentLength))
-    return Number(contentLength);
+    return parseInt(contentLength);
 }
 
-async function downloadMusic(name)
+async function downloadMusic(filename)
 {
   loading();
-  if(MusicUrl.length == 0)
+  bytesDownloaded =0;
+  const url = audioURL;
+  const fileLength = await getContentLength(url)
+  const intervalID =  setInterval(()=>
   {
-    return;
-  }
-  AudioFileLength = await getContentLength(MusicUrl);
-
-  var MusicRequest = new Request(MusicUrl,
-      {
-          method: 'POST',
-          headers: {
-              'Content-Type' : 'blob',
-              'Origin':'https://www.youtube.com',
-              'Accept':'*/*',
-              'Accept-Encoding':'gzip, deflate, br', 
-              'Accept-Language':  'fr-FR,fr;q=0.9,en-GB;q=0.8,en;q=0.7,en-US;q=0.6,es;q=0.5',
-              'referer':'Referer',
-              'Sec-Ch-Ua':'"Google Chrome";v="117", "Not;A=Brand";v="8", "Chromium";v="117"',
-              'Sec-Fetch-Mode': 'cors'
-          }
-      });
-  const audioFile = await fetch(MusicRequest).then(response => download(response));
-  getFile(audioFile, name);
+      updateCompletion(fileLength)
+  },500)
+  const startedAt = Date.now();
+  const data = await startDownloading(url,fileLength)
+  console.log("Le téléchargement est terminé, téléchargement total : "+bytesDownloaded.toString())
+  console.log("time ellapsed : " +((Date.now()-startedAt)/1000).toString()+"seconde")
+  console.log(((fileLength/1000000)/((Date.now()-startedAt)/1000)).toString()+" MB/s")
+  clearInterval(intervalID);
+  const orderedData = mergeChunks(data)
+  const file = new Blob(orderedData,{type :"audio/mp3"})
+  writeFile(file, filename+".mp3")
+  sleep()
 }
 
-async function download(response)
+async function downloadVideo(filename)
 {
-  console.log("start downloading...")
-  var chunks = [];
-  console.log(response.headers);
-  var fileLength = response.headers.get('content-length');
-  console.log(fileLength);
-  const reader = response.body.getReader()
-
-  var timebefore = 0;
-  var timeafter = 0;
-  const starttime = Date.now();
-  let ETA =0
-  let sec = 0;
-  while(true){
-    timebefore = Date.now();
-    const { done, value } = await reader.read();
-    timeafter = Date.now();
-    let timeEllapsed = timeafter - timebefore;
-    sec += timeEllapsed
-    if(sec > 1000)
-    {
-      ETA = ((((fileLength/value.length)*timeEllapsed)-(timeafter-starttime))/1000);
-      sec -= 1000;
-    }
-    if(done){
-      break;
-    }
-    addPercent(value.length,ETA);
-    chunks.push(value);
-  }
-  return new Blob(chunks,{type :"audio/mp3"});
+  const videoUrl = videoURL;
+  const soundURL = audioURL;
+  const audioFileLength = await getContentLength(soundURL)
+  const videoFileLength = await getContentLength(videoUrl)
+  const intervalID =  setInterval(()=>
+  {
+      updateCompletion(videoFileLength+audioFileLength)
+  },500)
+  const startedAt = Date.now();
+  const dataVideo = await startDownloading(videoUrl,videoFileLength)
+  const dataSound = await startDownloading(soundURL,audioFileLength)  
+  console.log("download is over")
+  console.log("time ellapsed : " +((Date.now()-startedAt)/1000).toString()+"seconde")
+  console.log((((videoFileLength+audioFileLength)/1000000)/((Date.now()-startedAt)/1000)).toString()+" MB/s")
+  clearInterval(intervalID);
+  const orderedVideo = mergeChunks(dataVideo)
+  const orderedAudio = mergeChunks(dataSound)
+  const file = new Blob([orderedVideo,orderedAudio],{type :"video/mp4"})
+  writeFile(file, filename+".mp4")
+  sleep()
 }
 
-function getFile(file, name)
-{               
-        var href = window.URL.createObjectURL(file);
+async function startDownloading(url,fileLength)
+{
+  return new Promise(async (resolve, reject)=>
+  {
+    try
+    {
+      var chunkID = 0
+      var chunkMap = new Map();
+      const requestMap = createRequestMap(url,10000,fileLength)
+      console.log(requestMap)
+      const shuffledMap = shuffleMap(requestMap)
+      const recursiveFunction =async(id)=>
+      {
+        if(i >= requestMap.size)return;
+        downloadPart(shuffledMap.get(id),id).then(value=>
+        {
+          chunkID +=1
+          chunkMap.set(value.index, value.data); 
+          
+          if(chunkID < requestMap.size)
+          {
+            var randomTime = Math.floor(Math.random()* 100 + TIME_BTWEEN_REQ)
+            delay(randomTime)
+            recursiveFunction(chunkID);
+          }
+          if(chunkMap.size == requestMap.size)
+          {
+            
+            resolve(chunkMap)
+          } 
+        });
+      } 
+      
+      for(var i = 0;i<5; i++)
+      {
+        recursiveFunction(i)
+      }
+
+
+    }catch (error)
+    {
+      return reject(error)
+    }
+  })
+}
+
+function shuffleMap(map) {
+  const entries = Array.from(map.entries());
+
+  for (let i = entries.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [entries[i], entries[j]] = [entries[j], entries[i]];
+  }
+
+  // Reconstruire la carte à partir du tableau mélangé
+  const shuffledMap = new Map(entries);
+  return shuffledMap;
+}
+
+function createRequestMap(url, range, filesize)
+{
+  var requestMap = new Map();
+  var lastRandomRange = -1
+  var index = 0;
+  while(lastRandomRange < filesize)
+  {
+    var randomRange = Math.floor(Math.random()* range+lastRandomRange + DEFAULT_RANGE)
+
+    if(randomRange >= filesize)
+    {
+      randomRange = filesize
+    }
+    parturl = url+ "&range="+(lastRandomRange + 1).toString() + "-"+(randomRange).toString()
+    console.log((lastRandomRange + 1).toString() + "-"+(randomRange).toString())
+    lastRandomRange = randomRange
+    requestMap.set(index,parturl)
+    index +=1;
+  }
+  return requestMap
+}
+
+async function downloadPart(url, index)
+{
+    console.log(url)
+    return new Promise(async (resolve, reject) => {
+        try {
+            const part =new Request(url,
+            {
+                method: 'POST',
+                headers: {
+                    'content-Type' : 'blob'
+                }
+            });
+            const response = await fetch(part)
+            downloading(response).then(value =>
+            {
+                resolve({data :value,index : index})
+            })
+        }catch(error)
+        {
+            reject(error)
+        }
+    });
+}
+
+function delay(ms) {
+    return new Promise(resolve => {
+      setTimeout(resolve, ms);
+    });
+}
+
+async function downloading(response) {
+    return new Promise(async (resolve, reject) => {
+      try {
+        var chunks = [];
+        const reader = response.body.getReader();
+        
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          bytesDownloaded += value.length;
+          //console.log(bytesDownloaded)
+          chunks.push(value);
+        }
+  
+        resolve(chunks);
+      } catch (error) {
+        reject(error);
+      }
+    });
+  }
+
+function mergeChunks(chunks, fileLength)
+{
+    let tableauDeMap = Array.from(chunks);
+    tableauDeMap.sort((a, b) => a[0] - b[0]);
+    let orderedMap = Array.from(new Map(tableauDeMap).values())
+    flattenedArray = orderedMap.flat();
+    return flattenedArray;
+}
+
+function writeFile(file,name)
+{
+    
+    var href = window.URL.createObjectURL(file);
         var link = document.createElement("a");
         link.href = href;
         link.download = name;
@@ -208,7 +289,15 @@ function getFile(file, name)
             URL.revokeObjectURL(href);
             document.body.removeChild(link);            
         }, 0); 
-        sleep()
 }
 
+async function updateCompletion(fileLength)
+{   
+    pourcent.textContent = Math.ceil(bytesDownloaded/fileLength*100)+"%"
+}
+
+async function getByteRate(value)
+{
+    
+} 
 
